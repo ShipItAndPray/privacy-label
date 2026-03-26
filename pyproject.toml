@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "privacy-label"
-version = "0.2.0"
+version = "0.3.0"
 description = "Privacy nutrition label for any website. One command: scan, score, compare."
 readme = "README.md"
 license = "MIT"

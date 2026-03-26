@@ -77,6 +77,27 @@ def scan(url: str) -> ScanResult:
             # Check DNT response
             result.has_dnf_header = headers.get("tk") == "N" or "dnt" in headers
 
+            # Check response headers for tracking signals
+            set_cookie_headers = resp.headers.get_list("set-cookie") if hasattr(resp.headers, "get_list") else []
+            for sc in set_cookie_headers:
+                sc_lower = sc.lower()
+                for pattern, name, category in COOKIE_PATTERNS:
+                    if pattern.lower() in sc_lower:
+                        result.cookies_set.append(Tracker(
+                            name=name, category=category, severity=2, source="set-cookie-header"
+                        ))
+
+            # P3P header (legacy privacy platform)
+            if "p3p" in headers:
+                # Sites still sending P3P are usually doing it for IE compat with tracking cookies
+                pass  # informational only
+
+            # Report-To / NEL headers indicate telemetry
+            if "report-to" in headers or "nel" in headers:
+                result.data_signals.append(DataSignal(
+                    name="Network Error Logging (NEL)", category="api_access", source="header"
+                ))
+
             # Cookies
             for cookie in resp.cookies.jar:
                 for pattern, name, category in COOKIE_PATTERNS:
@@ -99,6 +120,16 @@ def scan(url: str) -> ScanResult:
                 external_resources.append(("iframe", tag["src"]))
             for tag in soup.find_all("link", href=True):
                 external_resources.append(("link", tag["href"]))
+
+            # Check noscript tags — tracking pixels hidden for non-JS users
+            for noscript in soup.find_all("noscript"):
+                noscript_html = str(noscript)
+                for pattern, name, category, severity in TRACKER_PATTERNS:
+                    if pattern in noscript_html and name not in seen_trackers:
+                        seen_trackers.add(name)
+                        result.trackers.append(Tracker(
+                            name=name, category=category, severity=severity, source="noscript"
+                        ))
 
             # Also check inline scripts
             inline_scripts = " ".join(s.string or "" for s in soup.find_all("script") if s.string)
@@ -130,6 +161,23 @@ def scan(url: str) -> ScanResult:
                     result.data_signals.append(DataSignal(
                         name=name, category=category, source="html"
                     ))
+
+            # Meta tag analysis — social/tracking embeds
+            for meta in soup.find_all("meta"):
+                name_attr = (meta.get("name") or meta.get("property") or "").lower()
+                content = (meta.get("content") or "").lower()
+                if "fb:app_id" in name_attr or "fb:admins" in name_attr:
+                    if "Facebook App ID" not in seen_trackers:
+                        seen_trackers.add("Facebook App ID")
+                        result.trackers.append(Tracker(name="Facebook App ID", category="social", severity=2, source="meta"))
+                if "google-site-verification" in name_attr:
+                    if "Google Site Verification" not in seen_trackers:
+                        seen_trackers.add("Google Site Verification")
+                        result.trackers.append(Tracker(name="Google Site Verification", category="analytics", severity=1, source="meta"))
+                if "msvalidate" in name_attr:
+                    if "Bing Site Verification" not in seen_trackers:
+                        seen_trackers.add("Bing Site Verification")
+                        result.trackers.append(Tracker(name="Bing Site Verification", category="analytics", severity=1, source="meta"))
 
             # Privacy policy detection
             for a in soup.find_all("a", href=True):

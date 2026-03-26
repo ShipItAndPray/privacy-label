@@ -99,6 +99,11 @@ def render_result(console: Console, result: ScanResult, compact: bool = False):
 
     console.print("\n" + "\n".join(features))
 
+    # Known intel notice
+    ki_count = len([t for t in result.trackers if t.source == "known_intel"])
+    if ki_count:
+        console.print(f"\n  [dim]Note: {ki_count} trackers from known site intelligence (JS-loaded, not visible in static HTML).[/dim]")
+
     # Summary
     ad_count = len([t for t in result.trackers if t.category == "advertising"])
     fp_count = len([t for t in result.trackers if t.category == "fingerprinting"])
@@ -164,15 +169,18 @@ def render_compare(console: Console, results: list[ScanResult]):
 
 def main():
     console = Console()
-    console.print("\n[bold cyan]privacy-label[/bold cyan] — privacy nutrition label for any website\n")
-
     args = sys.argv[1:]
+    json_mode = "--json" in args
+
+    if not json_mode:
+        console.print("\n[bold cyan]privacy-label[/bold cyan] — privacy nutrition label for any website\n")
 
     if not args or args[0] in ("-h", "--help", "help"):
         console.print("[bold]Usage:[/bold]")
         console.print("  privacy-label [bold]reddit.com[/bold]                     Scan one site")
         console.print("  privacy-label [bold]reddit.com twitter.com github.com[/bold]  Compare multiple")
         console.print("  privacy-label [bold]--compare reddit.com github.com[/bold]    Explicit compare mode")
+        console.print("  privacy-label [bold]--json reddit.com[/bold]                  JSON output for scripts")
         console.print()
         console.print("[dim]Scans for trackers, data collection, fingerprinting, cookies,")
         console.print("third-party requests, security headers, and privacy features.")
@@ -188,9 +196,32 @@ def main():
 
     results = []
     for url in urls:
-        console.print(f"[dim]Scanning {url}...[/dim]")
+        if not json_mode:
+            console.print(f"[dim]Scanning {url}...[/dim]")
         result = scan(url)
         results.append(result)
+
+    if json_mode:
+        import json
+        output = []
+        for r in results:
+            output.append({
+                "url": r.url,
+                "domain": r.domain,
+                "score": r.score,
+                "grade": r.grade,
+                "trackers": [{"name": t.name, "category": t.category, "severity": t.severity, "source": t.source} for t in r.trackers],
+                "data_signals": [{"name": s.name, "category": s.category} for s in r.data_signals],
+                "cookies": len(r.cookies_set),
+                "third_party_domains": len(r.third_party_requests),
+                "https": r.https,
+                "privacy_policy": r.has_privacy_policy,
+                "cookie_banner": r.has_cookie_banner,
+                "dnt_respected": r.has_dnf_header,
+                "security_headers": r.security_headers,
+            })
+        print(json.dumps(output[0] if len(output) == 1 else output, indent=2))
+        return
 
     if len(results) == 1 and not compare_mode:
         render_result(console, results[0])
