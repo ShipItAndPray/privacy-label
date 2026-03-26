@@ -5,6 +5,7 @@ from rich.table import Table
 from rich.panel import Panel
 from rich.columns import Columns
 from .scanner import scan, ScanResult
+from .report import generate_html_report
 
 
 GRADE_COLORS = {
@@ -181,6 +182,9 @@ def main():
         console.print("  privacy-label [bold]reddit.com twitter.com github.com[/bold]  Compare multiple")
         console.print("  privacy-label [bold]--compare reddit.com github.com[/bold]    Explicit compare mode")
         console.print("  privacy-label [bold]--json reddit.com[/bold]                  JSON output for scripts")
+        console.print("  privacy-label [bold]--export reddit.com facebook.com[/bold]   HTML report card (opens in browser)")
+        console.print("  privacy-label [bold]--worst facebook.com[/bold]               Top 3 privacy concerns")
+        console.print("  privacy-label [bold]--quick reddit.com github.com ...[/bold]  One-line batch leaderboard")
         console.print()
         console.print("[dim]Scans for trackers, data collection, fingerprinting, cookies,")
         console.print("third-party requests, security headers, and privacy features.")
@@ -239,6 +243,17 @@ def main():
             if not concerns:
                 console.print("  [green]No major concerns found![/green]")
             console.print()
+        return
+
+    export_mode = "--export" in args
+    if export_mode and results:
+        html = generate_html_report(results)
+        filename = "privacy-report.html"
+        with open(filename, "w") as f:
+            f.write(html)
+        console.print(f"\n[green]Report saved to {filename}[/green]")
+        import subprocess
+        subprocess.run(["open", filename], check=False)
         return
 
     if json_mode:
