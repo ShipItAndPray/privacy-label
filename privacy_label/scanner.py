@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
 from .trackers import TRACKER_PATTERNS, COOKIE_PATTERNS, DATA_COLLECTION_SIGNALS
+from .known_sites import get_known_intel
 
 
 @dataclass
@@ -166,6 +167,32 @@ def scan(url: str) -> ScanResult:
     except Exception as e:
         result.errors.append(str(e))
 
+    # Merge known site intelligence (supplements static scan)
+    intel = get_known_intel(result.domain)
+    if intel:
+        seen_names = {t.name for t in result.trackers}
+        for name, category, severity in intel.get("known_trackers", []):
+            if name not in seen_names:
+                result.trackers.append(Tracker(name=name, category=category, severity=severity, source="known_intel"))
+                seen_names.add(name)
+
+        seen_signals = {s.name for s in result.data_signals}
+        for name, category in intel.get("known_data", []):
+            if name not in seen_signals:
+                result.data_signals.append(DataSignal(name=name, category=category, source="known_intel"))
+                seen_signals.add(name)
+
+        # Use known cookie/3P counts if they exceed what we detected
+        known_cookies = intel.get("known_cookies", 0)
+        if known_cookies > len(result.cookies_set):
+            for i in range(known_cookies - len(result.cookies_set)):
+                result.cookies_set.append(Tracker(name=f"Cookie #{len(result.cookies_set)+1}", category="tracking", severity=2, source="known_intel"))
+
+        known_tp = intel.get("known_third_parties", 0)
+        if known_tp > len(result.third_party_requests):
+            for i in range(known_tp - len(result.third_party_requests)):
+                result.third_party_requests.append(f"(known 3rd party #{len(result.third_party_requests)+1})")
+
     # Calculate score
     result.score, result.grade = _calculate_score(result)
     return result
@@ -199,8 +226,8 @@ def _calculate_score(result: ScanResult) -> tuple[int, str]:
     score -= len(analytics_trackers) * 3
     score -= len(social) * 2
 
-    # Cookies
-    score -= len(result.cookies_set) * 3
+    # Cookies (cap at -18)
+    score -= min(len(result.cookies_set) * 3, 18)
 
     # Data collection signals
     high_risk = [s for s in result.data_signals if s.category in ("fingerprinting", "api_access")]
