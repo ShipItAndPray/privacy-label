@@ -1,0 +1,34 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "privacy-label"
+version = "0.1.0"
+description = "Privacy nutrition label for any website. One command: scan, score, compare."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+authors = [
+    { name = "ShipItAndPray" },
+]
+keywords = ["privacy", "tracker", "gdpr", "nutrition-label", "website-scanner", "cli"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Security",
+]
+dependencies = [
+    "rich>=13.0.0",
+    "httpx>=0.24.0",
+    "beautifulsoup4>=4.12.0",
+]
+
+[project.scripts]
+privacy-label = "privacy_label.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/ShipItAndPray/privacy-label"
