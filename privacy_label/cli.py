@@ -201,6 +201,46 @@ def main():
         result = scan(url)
         results.append(result)
 
+    quick_mode = "--quick" in args
+    worst_mode = "--worst" in args
+
+    if quick_mode and results:
+        for r in results:
+            grade_style = GRADE_COLORS.get(r.grade, "white")
+            ads = len([t for t in r.trackers if t.category == "advertising"])
+            fp = "FP!" if any(s.category == "fingerprinting" for s in r.data_signals) else "   "
+            console.print(f"  [{grade_style}]{r.grade:3s}[/{grade_style}] {r.score:3d}/100  {r.domain:25s}  {len(r.trackers):2d} trackers  {ads:2d} ads  {fp}  {len(r.third_party_requests):2d} 3P")
+        return
+
+    if worst_mode and results:
+        for r in results:
+            console.print(f"\n[bold]{r.domain}[/bold] — Top 3 Privacy Concerns\n")
+            concerns = []
+            # Rank concerns by severity
+            for t in r.trackers:
+                if t.category == "fingerprinting":
+                    concerns.append((5, f"[bold red]FINGERPRINTING:[/bold red] {t.name} — can uniquely identify you across sites"))
+                elif t.category == "advertising":
+                    concerns.append((4, f"[red]AD TRACKER:[/red] {t.name} — tracks you for targeted ads"))
+                elif t.category == "marketing":
+                    concerns.append((3, f"[yellow]MARKETING:[/yellow] {t.name} — monitors your behavior"))
+            for s in r.data_signals:
+                if s.category == "fingerprinting":
+                    concerns.append((5, f"[bold red]FINGERPRINTING:[/bold red] {s.name} — used to create a unique ID for you"))
+                elif s.category == "api_access":
+                    concerns.append((3, f"[yellow]DATA ACCESS:[/yellow] {s.name} — the site can read this from your device"))
+            if len(r.third_party_requests) > 15:
+                concerns.append((3, f"[yellow]DATA SHARING:[/yellow] Your data goes to {len(r.third_party_requests)} third-party companies"))
+            if not r.has_dnf_header:
+                concerns.append((1, f"[dim]IGNORES DNT:[/dim] This site ignores your Do Not Track preference"))
+            concerns.sort(key=lambda x: -x[0])
+            for i, (_, msg) in enumerate(concerns[:3], 1):
+                console.print(f"  {i}. {msg}")
+            if not concerns:
+                console.print("  [green]No major concerns found![/green]")
+            console.print()
+        return
+
     if json_mode:
         import json
         output = []
